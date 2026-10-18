@@ -1,155 +1,27 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Worldbound — Living World Simulator</title>
-  <link rel="stylesheet" href="styles.css">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Worldbound: A Cultivator's Life</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&family=Noto+Serif:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <div class="app-shell">
-    <header class="topbar">
-      <div class="brand-mark">W</div>
-      <div class="brand-copy">
-        <div class="eyebrow">LIVING WORLD SIMULATOR</div>
-        <h1>Worldbound</h1>
-      </div>
-      <div class="top-actions">
-        <span id="saveStatus" class="save-status">Local save ready</span>
-        <button id="saveBtn" class="button button-quiet">Save</button>
-        <button id="loadBtn" class="button button-quiet">Load</button>
-        <button id="resetBtn" class="button button-danger-quiet">New world</button>
-      </div>
-    </header>
-
-    <main>
-      <section class="hero panel">
-        <div class="hero-copy">
-          <div class="eyebrow">YOUR STORY DOES NOT WAIT</div>
-          <h2>A world that keeps moving<br><span>when you look away.</span></h2>
-          <p>Set a direction, establish standing orders, and let a living simulation resolve the years you choose to skip. Events can be missed. Plans can fail. Legacies can outlive their founders.</p>
-          <div class="hero-tags"><span>Deterministic core</span><span>Autonomous plans</span><span>Persistent history</span></div>
-        </div>
-        <div class="hero-art" aria-hidden="true">
-          <div class="sun"></div><div class="mountain mountain-back"></div><div class="mountain mountain-front"></div>
-          <div class="castle"><i></i><i></i><i></i><b></b></div>
-          <div class="river"></div>
-        </div>
-      </section>
-
-      <section class="world-strip">
-        <div><span class="metric-label">WORLD YEAR</span><strong id="yearValue">Year 1</strong></div>
-        <div><span class="metric-label">PLAYABLE CHARACTER</span><strong id="characterName">Aren Vale</strong></div>
-        <div><span class="metric-label">FACTION</span><strong id="factionName">Vale Settlement</strong></div>
-        <div><span class="metric-label">WORLD STATUS</span><strong><span class="status-dot"></span><span id="worldStatus">Stable</span></strong></div>
-      </section>
-
-      <div class="dashboard-grid">
-        <section class="panel character-panel">
-          <div class="section-heading"><div><div class="eyebrow">PLAYER CHARACTER</div><h3 id="characterTitle">Aren Vale</h3></div><span class="pill" id="characterState">Alive</span></div>
-          <p id="characterSubtitle" class="muted">Ambitious founder · Independent cultivator</p>
-          <div class="stats-grid">
-            <div class="stat"><span>Age</span><strong id="ageValue">20</strong></div>
-            <div class="stat"><span>Power</span><strong id="powerValue">12</strong></div>
-            <div class="stat"><span>Wealth</span><strong id="wealthValue">850 G</strong></div>
-            <div class="stat"><span>Influence</span><strong id="influenceValue">8</strong></div>
-          </div>
-          <div class="progress-label"><span>Ambition progress</span><strong id="ambitionPercent">8%</strong></div>
-          <div class="progress-track"><div id="ambitionBar" class="progress-fill" style="width:8%"></div></div>
-          <div class="small-note" id="lifeNote">Your lifespan depends on world rules and events.</div>
-        </section>
-
-        <section class="panel kingdom-panel">
-          <div class="section-heading"><div><div class="eyebrow">FACTION OVERVIEW</div><h3 id="settlementTitle">Vale Settlement</h3></div><span class="pill pill-green" id="factionTier">Settlement</span></div>
-          <div class="stats-grid">
-            <div class="stat"><span>Population</span><strong id="populationValue">286</strong></div>
-            <div class="stat"><span>Treasury</span><strong id="treasuryValue">2,400 G</strong></div>
-            <div class="stat"><span>Food</span><strong id="foodValue">1,100</strong></div>
-            <div class="stat"><span>Stability</span><strong id="stabilityValue">72/100</strong></div>
-          </div>
-          <div class="resource-line"><span>Military strength</span><strong id="militaryValue">18</strong></div>
-          <div class="resource-line"><span>Territory</span><strong id="territoryValue">1 region</strong></div>
-          <div class="resource-line"><span>Standing policy</span><strong id="policyLabel">Ambition</strong></div>
-        </section>
-
-        <section class="panel time-panel">
-          <div class="section-heading"><div><div class="eyebrow">TIME ENGINE</div><h3>Advance the world</h3></div><span class="pill">Simulation</span></div>
-          <p class="muted">Choose a time jump. Routine systems are aggregated; scheduled events and decisions are resolved in chronological order.</p>
-          <div class="jump-buttons">
-            <button class="jump-button" data-years="1">+1 year</button>
-            <button class="jump-button" data-years="5">+5 years</button>
-            <button class="jump-button" data-years="10">+10 years</button>
-            <button class="jump-button" data-years="25">+25 years</button>
-            <button class="jump-button" data-years="50">+50 years</button>
-            <button class="jump-button jump-featured" data-years="100">+100 years</button>
-          </div>
-          <label class="field-label" for="customYears">Custom jump (1–500 years)</label>
-          <div class="inline-form"><input id="customYears" type="number" min="1" max="500" value="100"><button id="customJumpBtn" class="button button-primary">Advance</button></div>
-          <div class="field-label">Interruption policy</div>
-          <select id="interruptMode" class="select-control">
-            <option value="none">No interruptions — finish the jump</option>
-            <option value="critical">Critical events — pause on critical threats</option>
-          </select>
-          <div class="field-label">Character autonomy</div>
-          <select id="autonomyMode" class="select-control">
-            <option value="planned">Planned — follow goals and constraints</option>
-            <option value="guided">Guided — adapt goals when worthwhile</option>
-            <option value="full">Full — follow personality and ambitions</option>
-          </select>
-          <button id="cancelJumpBtn" class="button button-danger-quiet hidden">Stop simulation</button>
-          <div id="simulationStatus" class="simulation-status">Ready to advance time.</div>
-        </section>
-
-        <section class="panel orders-panel">
-          <div class="section-heading"><div><div class="eyebrow">AUTONOMOUS BEHAVIOR</div><h3>Standing orders</h3></div><span class="pill pill-gold">Editable</span></div>
-          <p class="muted">These orders guide decisions during time jumps. They do not guarantee success.</p>
-          <label class="field-label" for="primaryGoal">Primary ambition</label>
-          <select id="primaryGoal" class="select-control">
-            <option value="power">Increase personal power</option>
-            <option value="wealth">Build sustainable wealth</option>
-            <option value="influence">Expand political influence</option>
-            <option value="legacy">Establish a lasting dynasty</option>
-          </select>
-          <label class="toggle-row"><span><strong>Protect emergency reserves</strong><small>Keep funds and food for essential operations.</small></span><input id="reserveToggle" type="checkbox" checked></label>
-          <label class="toggle-row"><span><strong>Avoid reckless wars</strong><small>Do not start fights with overwhelmingly stronger rivals.</small></span><input id="warToggle" type="checkbox" checked></label>
-          <label class="toggle-row"><span><strong>Pursue rare opportunities</strong><small>Consider discoveries, trade routes, and valuable alliances.</small></span><input id="opportunityToggle" type="checkbox" checked></label>
-          <label class="field-label" for="riskTolerance">Risk tolerance</label>
-          <select id="riskTolerance" class="select-control">
-            <option value="cautious">Cautious</option>
-            <option value="balanced" selected>Balanced</option>
-            <option value="bold">Bold</option>
-          </select>
-          <button id="applyOrdersBtn" class="button button-primary button-full">Apply standing orders</button>
-          <div id="ordersStatus" class="small-note">Orders are active.</div>
-        </section>
-
-        <section class="panel activity-panel">
-          <div class="section-heading"><div><div class="eyebrow">WORLD HISTORY</div><h3>Chronicle & event feed</h3></div><span class="pill" id="eventCount">0 events</span></div>
-          <div class="filter-row">
-            <button class="filter-button active" data-filter="all">All</button>
-            <button class="filter-button" data-filter="character">Character</button>
-            <button class="filter-button" data-filter="faction">Faction</button>
-            <button class="filter-button" data-filter="world">World</button>
-          </div>
-          <div id="eventFeed" class="event-feed"><div class="empty-state">Your history begins here. Advance time to see the world change.</div></div>
-        </section>
-
-        <section class="panel plan-panel">
-          <div class="section-heading"><div><div class="eyebrow">ACTIVE PLAN</div><h3>Current direction</h3></div><span class="pill pill-green" id="planStatus">Active</span></div>
-          <div class="plan-card">
-            <div class="plan-icon">↗</div>
-            <div><strong id="planTitle">Build power and influence</strong><p id="planDescription">Train, accumulate resources, develop the settlement, and seek opportunities that support long-term ambition.</p></div>
-          </div>
-          <div class="resource-line"><span>Current activity</span><strong id="currentActivity">Preparing plans</strong></div>
-          <div class="resource-line"><span>Next decision</span><strong id="nextDecision">Within 1 year</strong></div>
-          <div class="resource-line"><span>Legacy path</span><strong id="legacyStatus">Founder-led</strong></div>
-          <button id="showChronicleBtn" class="button button-quiet button-full">Generate century report</button>
-          <div id="chronicleBox" class="chronicle-box hidden"></div>
-        </section>
-      </div>
-      <footer><span>Worldbound prototype · v0.2</span><span>Simulation outcomes are generated by local game rules, not an external AI.</span></footer>
-    </main>
-  </div>
-  <script src="game.js"></script>
+<main class="app">
+  <header>
+    <div class="seal" id="seal">凡</div>
+    <div class="who"><h1 id="name">Worldbound</h1><p id="meta"></p></div>
+    <div class="ladder" id="ladder" aria-label="Cultivation realms"></div>
+  </header>
+  <section class="vitals" id="vitals"></section>
+  <article class="scroll" id="card"></article>
+  <div class="choices" id="choices"></div>
+  <div class="actions" id="actions"></div>
+  <ol class="memoir" id="memoir"></ol>
+  <footer>Fate carries over between lives. <button id="wipe" class="link">Erase all progress</button></footer>
+</main>
+<script src="game.js"></script>
 </body>
 </html>
