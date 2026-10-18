@@ -1,37 +1,35 @@
 (() => {
   "use strict";
 
-  const SAVE_KEY = "worldbound-save-v1";
+  const SAVE_KEY = "worldbound-save-v2";
   const MONTHS_PER_YEAR = 12;
   const MAX_JUMP_YEARS = 500;
 
   const $ = (id) => document.getElementById(id);
+  let dirty = false;
   let state = createWorld();
+  initFounder();
   let activeFilter = "all";
   let simulating = false;
   let stopRequested = false;
 
   function createWorld() {
     return {
-      version: 1,
+      version: 2,
       time: { year: 1, month: 1 },
-      character: {
-        id: "aren-vale", name: "Aren Vale", age: 20, alive: true,
-        power: 12, influence: 8, wealth: 850, ambitionProgress: 8,
-        lifespan: 78, traits: { ambition: 85, caution: 55, loyalty: 65 },
-        currentActivity: "Preparing plans", nextDecisionMonth: 2,
-        heirName: "Mira Vale", generation: 1, fate: null
-      },
+      character: null, people: [],
+      dynasty: { house: "Vale", rulerId: null, heirId: null, extinct: false },
+      control: "player", // "player" | "observer" | "ended"
       faction: {
         name: "Vale Settlement", tier: "Settlement", population: 286,
         treasury: 2400, food: 1100, stability: 72, military: 18,
         territory: 1, incomePerMonth: 95, foodProduction: 45,
         foodConsumption: 39, upkeepPerMonth: 65, leader: "Aren Vale",
-        legacy: "Founder-led", corruption: 8, prosperity: 35
+        legacy: "Founder-led", corruption: 8, prosperity: 35, militaryBonus: 0
       },
       world: {
         status: "Stable", threat: 12, rivalPower: 20, trade: 1,
-        activeWar: false, famine: false, dynastyStrength: 20
+        activeWar: false, famine: false, dynastyStrength: 20, harvest: 1, droughtYears: 0
       },
       orders: {
         primaryGoal: "power", reserve: true, avoidWar: true,
@@ -41,7 +39,8 @@
       events: [],
       pending: [],
       chronicle: [],
-      counters: { events: 0, decisions: 0, actions: 0 },
+      counters: { events: 0, decisions: 0, actions: 0, people: 0, compacted: 0 },
+      cooldowns: {}, ended: false,
       lastJump: null,
       rngSeed: 927431
     };
@@ -62,6 +61,11 @@
   }
   function currentMonthIndex() { return (state.time.year - 1) * 12 + (state.time.month - 1); }
   function recordEvent(type, title, description, options = {}) {
+    if (options.cooldown) { // skip repeats of the same record inside the cooldown window (months)
+      const key = options.key || title, now = currentMonthIndex(), last = state.cooldowns[key];
+      if (last !== undefined && now - last < options.cooldown) return null;
+      state.cooldowns[key] = now;
+    }
     const event = {
       id: ++state.counters.events,
       year: state.time.year, month: state.time.month,
@@ -71,9 +75,108 @@
     state.events.unshift(event);
     state.chronicle.push({ ...event });
     if (state.events.length > 250) state.events.length = 250;
+    if (state.chronicle.length > 1500) { // keep saves small: drop the oldest routine entries, never major/critical ones
+      let excess = state.chronicle.length - 1200;
+      state.chronicle = state.chronicle.filter(e => (excess > 0 && e.importance === "normal") ? (excess--, state.counters.compacted++, false) : true);
+    }
     return event;
   }
   function money(n) { return Math.round(n).toLocaleString("en-US") + " G"; }
+
+  // ---------- People, mortality and succession ----------
+  // Every person (founder, heirs, successors, rivals, exiles) lives in state.people and
+  // follows the SAME rules: a lifespan rolled at birth plus an age-based yearly hazard.
+  const GIVEN = ["Mira","Toren","Selene","Doran","Isolde","Garrick","Lysa","Bram","Edda","Corin","Nessa","Alric","Tamsin","Orin","Wren","Petra","Joss","Maren","Varro"];
+  const HOUSES = ["Ashdown","Corvane","Hale","Marrow","Thorne","Wexley","Brandt","Ilvar"];
+  function rollLifespan() {
+    const z = (random() + random() + random() + random() - 2) / 0.5774; // ~normal, sd 1
+    return clamp(Math.round(72 + z * 9), 40, 100);
+  }
+  function deathHazard(age) { return age < 5 ? 0.004 : age < 50 ? 0.0015 : 0.004 + (age - 50) * 0.0006; }
+  function personById(id) { return state.people.find(x => x.id === id) || null; }
+  function newPerson(o = {}) {
+    const { given, ...rest } = o;
+    const house = rest.house || state.dynasty.house;
+    const first = given || GIVEN[randInt(0, GIVEN.length - 1)];
+    const person = Object.assign({
+      id: "p" + (++state.counters.people), name: `${first} ${house}`, house,
+      age: 0, alive: true, lifespan: rollLifespan(), born: state.time.year, died: null, fate: null,
+      generation: 1, reigned: false, role: "relative",
+      power: 5, influence: 0, wealth: 0, ambitionProgress: 0,
+      traits: { ambition: randInt(30, 90), caution: randInt(30, 90), loyalty: randInt(30, 90) },
+      currentActivity: "Preparing plans", nextDecisionMonth: 2
+    }, rest);
+    state.people.push(person);
+    return person;
+  }
+  function initFounder() {
+    const p = newPerson({ given: "Aren", house: "Vale", age: 20, role: "ruler", reigned: true, power: 12, influence: 8, wealth: 850, ambitionProgress: 8, traits: { ambition: 85, caution: 55, loyalty: 65 } });
+    state.dynasty.rulerId = p.id;
+    state.character = p;
+  }
+  function agePeople() {
+    const dead = [];
+    for (const p of state.people) {
+      if (!p.alive) continue; // the dead never age, act, or die twice
+      p.age += 1;
+      if (p.age >= p.lifespan || random() < deathHazard(p.age)) {
+        p.alive = false; p.died = state.time.year; p.fate = `Died at age ${p.age}`;
+        dead.push(p);
+      }
+    }
+    return dead;
+  }
+  function maybeBirthHeir() {
+    const d = state.dynasty, c = state.character;
+    if (state.control !== "player" || !c.alive || d.heirId || c.age < 20 || c.age > 50) return;
+    if (random() < (state.orders.primaryGoal === "legacy" ? 0.5 : 0.3)) {
+      const h = newPerson({ role: "heir", house: d.house, generation: c.generation + 1 });
+      d.heirId = h.id;
+      recordEvent("character", "An heir is born", `${h.name} was born to ${c.name} and is first in line to the succession.`, {});
+    }
+  }
+  function rulerDied(dead) {
+    const f = state.faction, d = state.dynasty;
+    f.stability = clamp(f.stability - 8, 0, 100);
+    const heir = d.heirId ? personById(d.heirId) : null;
+    let successor = null, text = "";
+    if (heir && heir.alive) {
+      const regency = heir.age < 16;
+      const dispute = random() < clamp((60 - f.stability) / 200 + (regency ? 0.1 : 0), 0.02, 0.4);
+      if (dispute) {
+        f.stability = clamp(f.stability - 10, 0, 100);
+        if (random() < 0.4) {
+          heir.role = "exiled";
+          successor = newPerson({ role: "ruler", house: HOUSES[randInt(0, HOUSES.length - 1)], age: randInt(25, 50) });
+          d.house = successor.house;
+          text = `A rival, ${successor.name}, seized power in the succession dispute and ${heir.name} was set aside. House ${d.house} now rules.`;
+        } else text = `${heir.name} won a contested succession${regency ? " as a child under a regency" : ""}, at a cost to stability.`;
+      } else text = `${heir.name} inherited leadership${regency ? " as a child, with a council governing in their name" : ""}.`;
+      successor = successor || heir;
+    } else if (f.stability >= 45 && random() < 0.6) {
+      successor = newPerson({ role: "ruler", house: d.house, age: randInt(20, 50), generation: dead.generation + 1 });
+      f.stability = clamp(f.stability - 10, 0, 100);
+      text = `${dead.name} left no living heir. A distant relative, ${successor.name}, claimed the throne.`;
+    }
+    if (!successor) {
+      d.extinct = true; d.heirId = null; state.control = "observer";
+      f.leader = "Regency Council"; f.legacy = "Dynasty extinct; council rule"; f.dynastyStrength = 0;
+      recordEvent("character", `${dead.name} dies; House ${d.house} ends`, `${dead.name} died at age ${dead.age} with no living heir and no claimant able to hold the throne. The dynasty is extinct, but ${f.name} continues under a council. You are now observing.`, { importance: "critical" });
+      if (state.orders.interruptions === "critical") state._pauseRequested = "Dynasty extinct";
+      return;
+    }
+    successor.role = "ruler"; successor.reigned = true;
+    if (successor.generation <= dead.generation && successor.house === dead.house) successor.generation = dead.generation + 1;
+    successor.wealth = Math.round(dead.wealth * 0.6) + 300;
+    successor.power = Math.max(5, Math.round(dead.power * 0.4));
+    successor.influence = Math.round(dead.influence * 0.5);
+    successor.ambitionProgress = 5;
+    d.rulerId = successor.id; d.heirId = null; d.extinct = false;
+    state.character = successor; state.control = "player";
+    f.leader = successor.name; f.legacy = "Successor-led";
+    recordEvent("character", `${dead.name} dies; ${successor.name} takes power`, `${dead.name} died at age ${dead.age}. ${text}`, { importance: "critical" });
+    if (state.orders.interruptions === "critical") state._pauseRequested = `Succession: ${dead.name} to ${successor.name}`;
+  }
 
   function applyOrdersFromUI() {
     state.orders.primaryGoal = $("primaryGoal").value;
@@ -117,21 +220,24 @@
     // All values below are simulation rules; no AI or narrative text can mutate them directly.
     f.treasury += f.incomePerMonth - f.upkeepPerMonth;
     f.food += f.foodProduction - f.foodConsumption;
+    f.food = Math.min(f.food, f.foodConsumption * 18); // granaries spoil: stocks are capped at ~18 months
     if (f.food < 0) {
       const shortage = Math.min(10, Math.ceil(Math.abs(f.food) / 10));
       f.food = 0;
       f.stability = clamp(f.stability - shortage * 0.7, 0, 100);
       f.population = Math.max(0, f.population - shortage);
+      if (!state.world.famine) recordEvent("world", "Famine", `Granaries ran empty in ${f.name}. Hunger is spreading and unrest is rising.`, { importance: "critical" });
       state.world.famine = true;
     } else if (f.food > 250 && state.world.famine) {
       state.world.famine = false;
       f.stability = clamp(f.stability + 4, 0, 100);
+      recordEvent("world", "The famine ends", `Food stores recovered in ${f.name} and order slowly returned.`, {});
     }
     if (f.treasury < 0) {
       f.stability = clamp(f.stability - 0.8, 0, 100);
       f.corruption = clamp(f.corruption + 0.08, 0, 100);
     }
-    if (f.food > 800 && f.treasury > 1000 && f.stability > 55 && random() < 0.22) {
+    if (f.food > f.foodConsumption * 6 && f.treasury > 1000 && f.stability > 55 && f.population < f.territory * 450 && random() < 0.22) {
       f.population += randInt(0, 2);
     }
     if (f.stability > 70 && f.treasury > 1500 && random() < 0.05) f.prosperity = clamp(f.prosperity + 1, 0, 100);
@@ -139,6 +245,10 @@
       c.wealth += Math.max(0, f.incomePerMonth - f.upkeepPerMonth) * 0.08;
     }
     f.stability = clamp(f.stability, 0, 100);
+    if (f.population > f.territory * 450 * 1.3) { // lost land cannot feed everyone: people leave
+      f.population = Math.max(1, f.population - Math.ceil(f.population * 0.01));
+      recordEvent("world", "Emigration", `People are leaving ${f.name} as the remaining land cannot support its population.`, { cooldown: 120 });
+    }
     f.treasury = Math.round(f.treasury * 100) / 100;
     f.food = Math.round(f.food * 100) / 100;
   }
@@ -156,7 +266,7 @@
       f.incomePerMonth += 4;
       f.foodProduction += 3;
       c.currentActivity = "Stabilizing food and finances";
-      recordEvent("faction", "Emergency management", `${c.name} redirected effort toward food production and essential income.`, { importance: "major" });
+      recordEvent("faction", "Emergency management", `${c.name} redirected effort toward food production and essential income.`, { importance: "major", cooldown: 24 });
       return;
     }
 
@@ -166,9 +276,9 @@
       c.wealth = Math.max(0, c.wealth - (o.risk === "bold" ? 35 : 20));
       if (random() < opportunityChance && o.opportunities) {
         c.power += randInt(2, 5);
-        recordEvent("character", "A rare technique discovered", `${c.name} found a technique that accelerated personal development.`, { importance: "major" });
+        recordEvent("character", "A rare technique discovered", `${c.name} found a technique that accelerated personal development.`, { importance: "major", cooldown: 120 });
       } else {
-        recordEvent("character", "Years of disciplined training", `${c.name} focused on training and improved their power.`, {});
+        recordEvent("character", "Years of disciplined training", `${c.name} focused on training and improved their power.`, { cooldown: 60 });
       }
     } else if (o.primaryGoal === "wealth") {
       f.incomePerMonth += randInt(2, 6);
@@ -176,9 +286,9 @@
       c.ambitionProgress += randInt(1, 3);
       if (o.opportunities && random() < opportunityChance) {
         f.trade += 1; f.incomePerMonth += 5;
-        recordEvent("faction", "A profitable trade agreement", `A trade arrangement increased the faction's long-term income.`, { importance: "major" });
+        recordEvent("faction", "A profitable trade agreement", `A trade arrangement increased the faction's long-term income.`, { importance: "major", cooldown: 90 });
       } else {
-        recordEvent("character", "Investment in commerce", `${c.name} expanded income-producing ventures.`, {});
+        recordEvent("character", "Investment in commerce", `${c.name} expanded income-producing ventures.`, { cooldown: 60 });
       }
     } else if (o.primaryGoal === "influence") {
       c.influence += randInt(1, 3);
@@ -186,23 +296,23 @@
       c.ambitionProgress += randInt(2, 4);
       if (o.opportunities && random() < opportunityChance) {
         w.rivalPower = Math.max(5, w.rivalPower - randInt(1, 4));
-        recordEvent("world", "A diplomatic opening", `${c.name} secured a useful political connection and improved regional standing.`, { importance: "major" });
-      } else recordEvent("character", "Political influence grows", `${c.name} negotiated with local leaders and expanded their network.`, {});
+        recordEvent("world", "A diplomatic opening", `${c.name} secured a useful political connection and improved regional standing.`, { importance: "major", cooldown: 90 });
+      } else recordEvent("character", "Political influence grows", `${c.name} negotiated with local leaders and expanded their network.`, { cooldown: 60 });
     } else {
       f.dynastyStrength = clamp(f.dynastyStrength + randInt(1, 4), 0, 100);
       c.ambitionProgress += randInt(2, 4);
       f.stability = clamp(f.stability + 1, 0, 100);
       if (random() < 0.45) {
         f.legacy = "Institutions developing";
-        recordEvent("faction", "Institutions established", `${c.name} improved succession procedures and strengthened local administration.`, { importance: "major" });
-      } else recordEvent("character", "Planning for a lasting legacy", `${c.name} invested in institutions and long-term continuity.`, {});
+        recordEvent("faction", "Institutions established", `${c.name} improved succession procedures and strengthened local administration.`, { importance: "major", cooldown: 120 });
+      } else recordEvent("character", "Planning for a lasting legacy", `${c.name} invested in institutions and long-term continuity.`, { cooldown: 60 });
     }
 
     // Expansion depends on capacity, reserves, stability, and military conditions.
-    if (reserveSafe && f.stability > 50 && f.treasury > 1800 && random() < 0.28) {
+    if (reserveSafe && f.stability > 50 && f.treasury > 1800 + 400 * f.territory && random() < 0.28 / (1 + 0.3 * f.territory)) {
       f.territory += 1;
       f.population += randInt(20, 75);
-      f.treasury -= 300;
+      f.treasury -= 300 + 150 * f.territory;
       f.incomePerMonth += 12;
       f.upkeepPerMonth += 8;
       f.tier = f.territory >= 5 ? "City-State" : f.territory >= 3 ? "Town" : "Settlement";
@@ -229,8 +339,7 @@
 
   function resolveWorldEvents() {
     const f = state.faction, c = state.character, w = state.world;
-    // Annual events happen at month 12.
-    if (state.time.month !== 12) return;
+    // Called once per year-end (from processMonth). The old month-12 guard made this unreachable.
     if (w.activeWar) {
       const strength = f.military + randInt(-5, 8) + (f.food > 100 ? 4 : -5);
       const rival = w.rivalPower + randInt(-5, 8);
@@ -245,7 +354,7 @@
         f.territory = Math.max(1, f.territory - 1);
         f.stability = clamp(f.stability - 12, 0, 100);
         f.treasury = Math.max(0, f.treasury - 250);
-        f.military = Math.max(5, f.military - 3);
+        f.militaryBonus -= 3;
         recordEvent("world", "The border war ends in defeat", `${f.name} lost territory and influence after an unsuccessful defense.`, { importance: "critical" });
       }
     }
@@ -261,64 +370,74 @@
         f.stability = clamp(f.stability - 5, 0, 100);
         recordEvent("faction", "Public dissatisfaction", "Unequal benefits and local grievances reduced stability.", {});
       } else {
-        f.military += 2;
+        f.militaryBonus += 2;
         recordEvent("faction", "Military reforms", "Training and organization improved defensive capability.", {});
       }
     }
-    // Annual upkeep of institutional and population growth.
+    // Weather: droughts last several years and have a long cooldown, so famine can emerge from them.
+    if (w.droughtYears > 0) {
+      w.droughtYears--; w.harvest = 0.5;
+      if (w.droughtYears === 0) { w.harvest = 1; recordEvent("world", "The drought ends", "Rains returned and harvests recovered.", {}); }
+    } else {
+      w.harvest = 1;
+      if (random() < 0.06 && !(state.cooldowns.drought > currentMonthIndex() - 600)) {
+        state.cooldowns.drought = currentMonthIndex();
+        w.droughtYears = randInt(2, 4); w.harvest = 0.5;
+        recordEvent("world", "Drought", "Failing rains cut harvests across the region. Food stores will be tested.", { importance: "major" });
+      }
+    }
+    // Annual rescale: costs and output follow population, so growth creates real pressure.
     if (f.population > 0) {
       f.foodConsumption = Math.max(25, Math.round(f.population * 0.14));
-      f.foodProduction = Math.max(30, Math.round(f.population * 0.17));
+      f.foodProduction = Math.max(10, Math.round(f.population * 0.17 * w.harvest));
       f.upkeepPerMonth = Math.max(40, Math.round(f.population * 0.22));
-      f.incomePerMonth = Math.max(55, Math.round(55 + f.prosperity * 0.6 + f.territory * 12 - f.corruption * 0.2));
+      f.incomePerMonth = Math.max(55, Math.round(20 + f.population * 0.16 + f.prosperity * 0.6 + f.territory * 10 - f.corruption * 0.2)); // income scales with people, like upkeep
+      f.military = Math.max(5, Math.round(f.population * 0.06 + f.territory * 2) + f.militaryBonus);
     }
+    if (f.treasury < 0) { // debt forces austerity: spending is cut and taxes rise, at a cost to stability
+      f.upkeepPerMonth = Math.round(f.upkeepPerMonth * 0.85); f.incomePerMonth = Math.round(f.incomePerMonth * 1.05);
+      f.stability = clamp(f.stability - 3, 0, 100);
+      recordEvent("faction", "Austerity measures", `With the treasury in debt, ${f.name} cut spending and raised taxes. The public is unhappy.`, { importance: "major", cooldown: 60 });
+    }
+    w.rivalPower = clamp(w.rivalPower + randInt(-1, 2), 5, 150);
+    if (f.territory > 6) f.stability = clamp(f.stability - (f.territory - 6) * 0.8, 0, 100); // overextension
   }
 
   function ageAndLifeEvents() {
-    if (state.time.month !== 1) return;
-    const c = state.character, f = state.faction;
-    if (c.alive) {
-      c.age += 1;
-      if (c.age >= c.lifespan) {
-        c.alive = false;
-        c.fate = `Died at age ${c.age}`;
-        c.currentActivity = "Life ended; legacy continues";
-        f.leader = c.heirName;
-        f.legacy = "Successor-led";
-        f.stability = clamp(f.stability - 8, 0, 100);
-        f.dynastyStrength = clamp(f.dynastyStrength + 5, 0, 100);
-        recordEvent("character", `${c.name} dies; succession begins`, `${c.name} died at age ${c.age}. ${c.heirName} inherited leadership under the example succession rule. The world continues.`, { importance: "critical" });
-        if (state.orders.interruptions === "critical") {
-          state._pauseRequested = `Character death and succession at age ${c.age}`;
-        }
-      }
-    } else {
-      // The successor is represented at faction level; the original character remains in history.
-      if (random() < 0.035) {
-        f.stability = clamp(f.stability + randInt(-4, 5), 0, 100);
-        recordEvent("faction", "The successor reshapes the realm", `${f.leader} changed a policy, affecting the faction's stability and direction.`, { importance: "major" });
+    const d = state.dynasty;
+    const dead = agePeople();
+    dead.sort((a, b) => (a.id === d.rulerId) - (b.id === d.rulerId)); // heirs first, ruler last
+    for (const p of dead) {
+      if (p.id === d.rulerId) rulerDied(p);
+      else if (p.id === d.heirId) {
+        d.heirId = null;
+        recordEvent("character", "The heir dies", `${p.name}, heir to the throne, died at age ${p.age}.`, { importance: "major" });
       }
     }
+    maybeBirthHeir();
   }
 
   function evaluateYearlyDecision() {
-    if (!state.character.alive) {
-      // A successor-led faction continues to make broad strategic progress.
+    if (state.control === "observer") {
+      // The dynasty is extinct; a council keeps the faction running at faction level.
       const f = state.faction;
-      if (f.stability > 40 && f.treasury > 1000 && random() < 0.35) {
+      if (f.stability > 40 && f.treasury > 1800 + 400 * f.territory && random() < 0.2 / (1 + 0.3 * f.territory)) {
         f.territory += 1;
         f.population += randInt(15, 55);
         f.incomePerMonth += 6;
         f.upkeepPerMonth += 5;
         f.tier = f.territory >= 5 ? "City-State" : f.territory >= 3 ? "Town" : "Settlement";
-        recordEvent("faction", "Successor-led expansion", `${f.leader} expanded the faction's influence under the inherited legacy.`, { importance: "major" });
+        recordEvent("faction", "Council-led expansion", `The council expanded ${f.name}'s influence and economic base.`, { importance: "major" });
       }
       return;
     }
+    if (state.character.age < 16) { state.character.currentActivity = "Growing up under a regency"; return; }
     evaluateAgentDecision();
   }
 
   function processMonth() {
+    if (state.ended) return;
+    dirty = true;
     simulateRoutineMonth();
     addMonths(1);
     if (state.time.month === 1) {
@@ -332,17 +451,30 @@
         recordEvent("character", "An independent choice", `${state.character.name} pursued a personal opportunity consistent with their ambitions.`, {});
       }
     }
-    if (state.faction.population <= 0) {
+    if (state.faction.population <= 0 && !state.ended) { // processed exactly once; the run ends here
       state.faction.population = 0;
-      state.world.status = "Collapsed";
+      state.ended = true; state.control = "ended";
       recordEvent("faction", "The settlement collapses", "The population has fallen to zero. The faction no longer functions as an inhabited settlement.", { importance: "critical" });
-      state._pauseRequested = "Faction collapse";
     }
-    if (state.faction.stability < 15 && random() < 0.08) {
+    if (state.faction.territory === 1 && state.faction.stability < 15 && random() < 0.03 && !(state.cooldowns.uprising > currentMonthIndex() - 60)) {
+      state.cooldowns.uprising = currentMonthIndex();
+      const lost = Math.round(state.faction.population * 0.05);
+      state.faction.population = Math.max(1, state.faction.population - lost);
+      state.faction.stability = clamp(state.faction.stability + 15, 0, 100);
+      recordEvent("faction", "An uprising shakes the realm", `Years of unrest erupted into open revolt. Order was restored only after about ${lost} people were lost.`, { importance: "major" });
+    }
+    if (state.faction.territory > 1 && state.faction.stability < 15 && random() < 0.08 && !(state.cooldowns.breakaway > currentMonthIndex() - 36)) {
+      state.cooldowns.breakaway = currentMonthIndex();
       state.faction.territory = Math.max(1, state.faction.territory - 1);
       state.faction.stability = clamp(state.faction.stability + 4, 0, 100);
       recordEvent("faction", "A region breaks away", "Low stability caused a region to become independent or fall outside the faction's control.", { importance: "major" });
     }
+    updateWorldStatus();
+  }
+
+  function updateWorldStatus() {
+    const w = state.world, f = state.faction;
+    w.status = state.ended ? "Collapsed" : w.activeWar ? "At war" : w.famine ? "Famine" : f.stability < 35 ? "Unrest" : "Stable";
   }
 
   function advanceYears(years) {
@@ -352,8 +484,10 @@
       $("simulationStatus").textContent = `Choose a whole number from 1 to ${MAX_JUMP_YEARS} years.`;
       return;
     }
+    if (state.ended) { $("simulationStatus").textContent = "This world has ended. Start a new world."; return; }
     applyOrdersFromUI();
     simulating = true; stopRequested = false;
+    let pausedReason = null;
     $("cancelJumpBtn").classList.remove("hidden");
     const startYear = state.time.year;
     const targetMonthIndex = currentMonthIndex() + n * MONTHS_PER_YEAR;
@@ -363,21 +497,21 @@
     function runChunk() {
       const chunkLimit = 240;
       let count = 0;
-      while (currentMonthIndex() < targetMonthIndex && count < chunkLimit && !stopRequested) {
+      while (currentMonthIndex() < targetMonthIndex && count < chunkLimit && !stopRequested && !state.ended) {
         processMonth();
         count++; steps++;
         if (state._pauseRequested) {
           const reason = state._pauseRequested;
           state._pauseRequested = null;
           if (state.orders.interruptions === "critical") {
-            $("simulationStatus").textContent = `Paused at ${nowLabel()}: ${reason}. Resume with another time jump.`;
+            pausedReason = reason;
             stopRequested = true;
             break;
           }
         }
       }
       render();
-      if (currentMonthIndex() < targetMonthIndex && !stopRequested) {
+      if (currentMonthIndex() < targetMonthIndex && !stopRequested && !state.ended) {
         $("simulationStatus").textContent = `Simulating... ${Math.floor((currentMonthIndex() - ((startYear - 1) * 12)) / (n * 12) * 100)}%`;
         setTimeout(runChunk, 0);
       } else {
@@ -385,12 +519,15 @@
         $("cancelJumpBtn").classList.add("hidden");
         const completedYears = Math.floor((state.time.year - startYear) + (state.time.month - 1) / 12);
         state.lastJump = { startYear, endYear: state.time.year, requestedYears: n, steps, completedAt: nowLabel() };
-        if (stopRequested && !state._pauseRequested) {
+        if (state.ended) {
+          $("simulationStatus").textContent = `The run ended at ${nowLabel()}: the settlement collapsed.`;
+        } else if (pausedReason) {
+          $("simulationStatus").textContent = `Paused at ${nowLabel()}: ${pausedReason}. Start another jump to resume.`;
+        } else if (stopRequested) {
           $("simulationStatus").textContent = `Stopped or paused at ${nowLabel()}. ${steps} monthly steps processed.`;
         } else {
           $("simulationStatus").textContent = `Jump resolved at ${nowLabel()}. ${steps} monthly steps processed.`;
         }
-        recordEvent("world", "Time advancement completed", `The requested ${n}-year jump began in Year ${startYear} and stopped at ${nowLabel()}. Routine systems and eligible events were processed.`, {});
         render();
         saveGame(false);
       }
@@ -401,20 +538,20 @@
   function render() {
     const c = state.character, f = state.faction, w = state.world;
     $("yearValue").textContent = `Year ${state.time.year}, Month ${state.time.month}`;
-    $("characterName").textContent = c.alive ? c.name : `${c.heirName} (successor)`;
+    $("characterName").textContent = state.control === "observer" ? "No ruler — observing" : c.name;
     $("factionName").textContent = f.name;
     $("worldStatus").textContent = w.status;
-    $("characterTitle").textContent = c.alive ? c.name : c.heirName;
-    $("characterState").textContent = c.alive ? "Alive" : "Deceased";
-    $("characterState").className = c.alive ? "pill pill-green" : "pill";
-    $("characterSubtitle").textContent = c.alive ? `Ambitious founder · Generation ${c.generation}` : `${c.fate || "Life ended"} · Generation ${c.generation}`;
+    $("characterTitle").textContent = state.control === "observer" ? `${c.name} (last ruler)` : c.name;
+    $("characterState").textContent = state.control === "observer" ? "Observer mode" : state.control === "ended" ? "Run ended" : "Alive";
+    $("characterState").className = state.control === "player" ? "pill pill-green" : "pill";
+    $("characterSubtitle").textContent = `House ${c.house} · Generation ${c.generation}${c.alive ? "" : " · " + (c.fate || "deceased")}`;
     $("ageValue").textContent = c.alive ? c.age : `${c.age} at death`;
     $("powerValue").textContent = c.power;
     $("wealthValue").textContent = money(c.wealth);
     $("influenceValue").textContent = c.influence;
     $("ambitionPercent").textContent = `${Math.round(clamp(c.ambitionProgress, 0, 100))}%`;
     $("ambitionBar").style.width = `${clamp(c.ambitionProgress, 0, 100)}%`;
-    $("lifeNote").textContent = c.alive ? `Illustrative lifespan limit: age ${c.lifespan}.` : `The founder's story is recorded. ${f.leader} now leads the faction.`;
+    $("lifeNote").textContent = lifeNoteText();
     $("settlementTitle").textContent = f.name;
     $("factionTier").textContent = f.tier;
     $("populationValue").textContent = Math.round(f.population).toLocaleString();
@@ -425,12 +562,20 @@
     $("territoryValue").textContent = `${f.territory} region${f.territory === 1 ? "" : "s"}`;
     $("policyLabel").textContent = state.orders.primaryGoal[0].toUpperCase() + state.orders.primaryGoal.slice(1);
     $("planTitle").textContent = goalLabel();
-    $("planDescription").textContent = c.alive ? `Follow the ${state.orders.primaryGoal} objective, preserve configured reserves, and adapt when major events change the opportunity or risk.` : `The founder's original ambition is now part of the historical record. The successor continues under faction-level rules.`;
+    $("planDescription").textContent = c.alive ? `Follow the ${state.orders.primaryGoal} objective, preserve configured reserves, and adapt when major events change the opportunity or risk.` : `No ruler remains. A council manages the faction under faction-level rules.`;
     $("currentActivity").textContent = c.currentActivity;
-    $("nextDecision").textContent = c.alive ? "Within 1 year" : "Successor decisions ongoing";
+    $("nextDecision").textContent = c.alive ? "Within 1 year" : "Council decisions ongoing";
     $("legacyStatus").textContent = f.legacy;
     $("eventCount").textContent = `${state.chronicle.length} events`;
     renderEvents();
+  }
+
+  function lifeNoteText() {
+    const c = state.character, d = state.dynasty;
+    if (state.control === "ended") return "The run has ended.";
+    if (state.control === "observer") return `House ${d.house} is extinct; ${c.name} was the last ruler. The faction continues under a council.`;
+    const heir = d.heirId ? personById(d.heirId) : null;
+    return `${heir ? `Heir: ${heir.name}, age ${heir.age}.` : "No living heir."} Rulers, heirs and rivals all follow the same mortality rules.`;
   }
 
   function renderEvents() {
@@ -470,7 +615,8 @@
       `Food: ${Math.round(state.faction.food).toLocaleString()}`,
       `Stability: ${Math.round(state.faction.stability)}/100`,
       `Territory: ${state.faction.territory}`,
-      `Founder: ${state.character.name} — ${state.character.fate || (state.character.alive ? "alive" : "deceased")}`,
+      `Ruler: ${state.character.name} (House ${state.dynasty.house}, generation ${state.character.generation}) — ${state.character.alive ? "alive, age " + state.character.age : state.character.fate || "deceased"}`,
+      `Rulers who have died: ${state.people.filter(p => p.reigned && !p.alive).length} · Control: ${state.control}`,
       "",
       "RECORDED EVENTS",
       `Total retained history: ${events.length}`,
@@ -483,9 +629,16 @@
     box.classList.remove("hidden");
   }
 
+  function serialize() { return JSON.stringify({ ...state, character: undefined }); }
+  function hydrate() { // rebuild the ruler reference from the single people registry
+    state.character = personById(state.dynasty.rulerId);
+    if (!state.character) throw new Error("Save has no ruler record");
+    delete state._pauseRequested;
+  }
+
   function saveGame(showStatus = true) {
     try {
-      localStorage.setItem(SAVE_KEY, JSON.stringify(state));
+      localStorage.setItem(SAVE_KEY, serialize());
       if (showStatus) $("saveStatus").textContent = `Saved at ${nowLabel()}`;
       else $("saveStatus").textContent = "Autosaved";
     } catch (err) {
@@ -501,8 +654,8 @@
         return;
       }
       const loaded = JSON.parse(raw);
-      if (!loaded || loaded.version !== 1 || !loaded.character || !loaded.faction) throw new Error("Invalid save format");
-      state = loaded;
+      if (!loaded || loaded.version !== 2 || !loaded.people || !loaded.faction) throw new Error("Invalid save format");
+      state = loaded; hydrate(); dirty = false;
       $("primaryGoal").value = state.orders.primaryGoal;
       $("reserveToggle").checked = state.orders.reserve;
       $("warToggle").checked = state.orders.avoidWar;
@@ -519,7 +672,7 @@
   }
   function resetWorld() {
     if (!confirm("Start a new world? This replaces the current in-memory world. Your existing local save remains until you save the new world.")) return;
-    state = createWorld();
+    state = createWorld(); initFounder(); dirty = false;
     $("primaryGoal").value = "power";
     $("reserveToggle").checked = true;
     $("warToggle").checked = true;
@@ -532,6 +685,14 @@
     render();
   }
 
+  if (typeof document === "undefined") { // Node: expose the engine for tests/tests.js
+    module.exports = {
+      get state() { return state; }, set state(v) { state = v; },
+      reset(seed) { state = createWorld(); if (seed) state.rngSeed = seed; initFounder(); },
+      processMonth, currentMonthIndex, serialize, hydrate
+    };
+    return;
+  }
   document.querySelectorAll("[data-years]").forEach(button => button.addEventListener("click", () => advanceYears(button.dataset.years)));
   $("customJumpBtn").addEventListener("click", () => advanceYears($("customYears").value));
   $("cancelJumpBtn").addEventListener("click", () => { stopRequested = true; $("simulationStatus").textContent = "Stop requested; finishing current simulation chunk."; });
@@ -547,6 +708,7 @@
   }));
 
   // Persist on page exit and after meaningful state changes.
-  window.addEventListener("beforeunload", () => { try { localStorage.setItem(SAVE_KEY, JSON.stringify(state)); } catch (_) {} });
+  // Only autosave on exit if this session changed the world; otherwise opening and closing the page would overwrite a good save with a fresh world.
+  window.addEventListener("beforeunload", () => { if (dirty) { try { localStorage.setItem(SAVE_KEY, serialize()); } catch (_) {} } });
   render();
 })();
