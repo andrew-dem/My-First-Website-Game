@@ -147,16 +147,27 @@
   }
   const $ = (id) => document.getElementById(id);
   function save() { try { localStorage.setItem(KEY, JSON.stringify({ S, M })); } catch (_) {} }
+  const GLY = { herb:"药", beggar:"丐", trial:"试", rival:"敌", realm:"秘", pill:"丹", feast:"毒", begs:"救", omen:"天", war:"战", cave:"洞", market:"市", elixir:"寿", demon:"魔", brother:"义", fall:"定" };
+  const SKY = [["#2c3a40","#d8a860"],["#1f3f44","#e0c88c"],["#1b3a55","#a8d4d0"],["#2b2459","#d8b0e0"],["#4a1c2a","#f0a070"],["#10102a","#f6e7a8"]];
+  const ridge = (b, a, f, p, fill, o) => { let d = "M0 170"; for (let x = 0; x <= 400; x += 20) d += ` L${x} ${(b - a * (0.55 * Math.abs(Math.sin(x * f + p)) + 0.45 * Math.sin(x * f * 2.3 + p * 1.7) ** 2)).toFixed(0)}`; return `<path d="${d} L400 170Z" fill="${fill}" opacity="${o}"/>`; };
+  function scene() { // ink-wash landscape: sky, light and altitude change with realm
+    const r = S.realm, [a, b] = SKY[r]; let st = "";
+    if (r >= 3) for (let i = 0; i < 24 + r * 6; i++) st += `<circle cx="${(i * 97) % 400}" cy="${(i * 53) % 90}" r="${i % 5 ? .7 : 1.3}" fill="#fff" opacity=".${4 + i % 5}"/>`;
+    return `<svg viewBox="0 0 400 170" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><defs><linearGradient id="sk" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${a}"/><stop offset="1" stop-color="${b}"/></linearGradient><radialGradient id="gl"><stop offset="0" stop-color="#fff6d8"/><stop offset="1" stop-color="#fff6d8" stop-opacity="0"/></radialGradient></defs><rect width="400" height="170" fill="url(#sk)"/>${st}<circle cx="290" cy="${70 - r * 6}" r="${34 + r * 6}" fill="url(#gl)" opacity=".8"/><circle cx="290" cy="${70 - r * 6}" r="${12 + r * 2}" fill="#fff3cf"/>${r >= 5 ? '<circle cx="290" cy="34" r="30" fill="none" stroke="#f1d27a" stroke-width="1.5"/>' : ""}${ridge(105 - r * 4, 40, .021, 1, "#1f3a3e", .55)}${ridge(125, 34, .033, 2, "#173034", .8)}<g class="mist"><ellipse cx="120" cy="125" rx="170" ry="9" fill="#e8f1ec" opacity=".18"/><ellipse cx="300" cy="140" rx="190" ry="8" fill="#e8f1ec" opacity=".16"/></g>${ridge(150, 26, .05, 3, "#0c1c1d", 1)}</svg>`;
+  }
   function render(fresh) {
+    const app = $("app"); app.dataset.realm = S.realm; app.classList.toggle("dead", !!S.dead);
+    $("art").innerHTML = scene();
     $("seal").textContent = R[S.realm][1]; $("name").textContent = S.name;
     $("meta").textContent = `${R[S.realm][0]} · Life ${M.lives} · Fate ${M.fate}`;
     $("ladder").innerHTML = R.map((r, i) => `<i class="${i < S.realm ? "done" : i === S.realm ? "now" : ""}" title="${r[0]}">${r[1]}</i>`).join("");
+    const C = 2 * Math.PI * 17;
     $("vitals").innerHTML =
-      `<div>Body<b>${S.body}/${bodyMax()}</b><div class="bar"><span style="width:${S.body / bodyMax() * 100}%"></span></div></div>` +
-      `<div>Lifespan<b>${S.age}/${total()}</b></div><div>Mind<b>${S.mind}</b></div><div>Luck<b>${S.luck}</b></div>` +
-      `<div class="wide">Qi<b>${Math.round(S.qi)}/100</b><div class="bar qi"><span style="width:${S.qi}%"></span></div></div>` +
-      `<div>Stones<b>${S.stones}</b></div><div>Standing<b>${S.rep}</b></div>`;
+      `<div class="qi"><svg viewBox="0 0 44 44" class="orb"><circle cx="22" cy="22" r="17" class="o0"/><circle cx="22" cy="22" r="17" class="o1" stroke-dasharray="${(S.qi / 100 * C).toFixed(1)} ${C.toFixed(1)}" transform="rotate(-90 22 22)"/><text x="22" y="26" text-anchor="middle">${Math.round(S.qi)}</text></svg>Qi</div>` +
+      `<div class="bars"><div>Body ${S.body}/${bodyMax()}<div class="bar"><span style="width:${S.body / bodyMax() * 100}%"></span></div></div><div>Lifespan ${S.age}/${total()}<div class="bar life"><span style="width:${Math.min(100, S.age / total() * 100)}%"></span></div></div></div>` +
+      `<div class="chips"><div>Mind<b>${S.mind}</b></div><div>Luck<b>${S.luck}</b></div><div>Stones<b>${S.stones}</b></div><div>Standing<b>${S.rep}</b></div></div>`;
     const card = $("card"), ch = $("choices"), ac = $("actions");
+    card.dataset.g = S.dead ? (S.dead.win ? "升" : "终") : GLY[S.ev.id] || "道";
     if (S.dead) {
       card.innerHTML = `<h2>${S.dead.win ? "Ascension" : "Your life ends"}</h2><p>${S.name} ${S.dead.cause} at age ${S.age}, in the ${R[S.realm][0]} realm. You carry ${S.dead.gain} fate into your next life.</p>`;
       ch.innerHTML = ""; ac.innerHTML = `<button class="act go" data-a="reborn">Reincarnate</button>`;
@@ -171,11 +182,20 @@
     if (fresh) { card.classList.remove("fresh"); void card.offsetWidth; card.classList.add("fresh"); }
     save();
   }
-  $("choices").onclick = (e) => { const b = e.target.closest("[data-c]"); if (b) { choose(+b.dataset.c); render(true); } };
-  $("actions").onclick = (e) => {
-    const a = e.target.closest("[data-a]"); if (!a) return;
-    ({ s3: () => seclude(3), s10: () => seclude(10), bt: breakthrough, reborn: newLife })[a.dataset.a](); render(true);
-  };
+  let mt;
+  function moment(kind, g, t, sub) { // full-screen beat for breakthroughs and death; tap to skip
+    const m = $("moment"); m.className = "moment " + kind;
+    m.innerHTML = `<div class="ring"></div><b>${g}</b><h2>${t}</h2><p>${sub}</p>`; m.hidden = false;
+    clearTimeout(mt); mt = setTimeout(() => { m.hidden = true; }, 2800);
+  }
+  $("moment").onclick = () => { $("moment").hidden = true; };
+  function act(fn) {
+    const pr = S.realm, pd = S.dead; fn(); render(true);
+    if (S.dead && !pd) S.dead.win ? moment("up", "升", "Ascension", `${S.name} leaves this world behind.`) : moment("end", "终", "Your life ends", `${S.name} ${S.dead.cause}.`);
+    else if (S.realm > pr) moment("up", R[S.realm][1], R[S.realm][0], "Breakthrough");
+  }
+  $("choices").onclick = (e) => { const b = e.target.closest("[data-c]"); if (b) act(() => choose(+b.dataset.c)); };
+  $("actions").onclick = (e) => { const a = e.target.closest("[data-a]"); if (a) act({ s3: () => seclude(3), s10: () => seclude(10), bt: breakthrough, reborn: newLife }[a.dataset.a]); };
   $("wipe").onclick = () => { if (confirm("Erase all progress and fate?")) { M = { fate: 0, lives: 0, best: 0 }; newLife(); render(true); } };
   try { const d = JSON.parse(localStorage.getItem(KEY)); if (d && d.S && d.M && d.S.log) { S = d.S; M = d.M; } } catch (_) {}
   if (!S) newLife();
