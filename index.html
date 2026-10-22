@@ -10,19 +10,28 @@
 </head>
 <body>
 <main class="app" id="app" data-realm="0">
-  <header class="scene">
-    <div id="art"></div>
-    <div class="head"><div class="seal" id="seal">凡</div><div class="who"><h1 id="name">Worldbound</h1><p id="meta"></p></div></div>
-  </header>
-  <nav class="ladder" id="ladder" aria-label="Cultivation realms"></nav>
-  <section class="vitals" id="vitals"></section>
-  <article class="scroll" id="card"></article>
-  <div class="choices" id="choices"></div>
-  <div class="actions" id="actions"></div>
-  <ol class="memoir" id="memoir"></ol>
-  <footer>Fate carries over between lives. <button id="wipe" class="link">Erase all progress</button></footer>
+  <div class="col-l">
+    <header class="scene"><div id="art"></div>
+      <div class="head"><div class="seal" id="seal">凡</div><div class="who"><h1 id="name">Worldbound</h1><p id="meta"></p></div></div></header>
+    <nav class="ladder" id="ladder" aria-label="Cultivation realms"></nav>
+    <section class="vitals" id="vitals"></section>
+    <section class="kit" id="kit"></section>
+  </div>
+  <div class="col-c">
+    <article class="scroll" id="card"></article>
+    <div class="choices" id="choices"></div>
+    <div class="actions" id="actions"></div>
+    <p class="keys" id="keys"></p>
+  </div>
+  <div class="col-r">
+    <nav class="tabs" id="tabs" role="tablist"></nav>
+    <section class="panel" id="panel"></section>
+    <footer>Fate carries over between lives. <button id="wipe" class="link">Erase all progress</button></footer>
+  </div>
 </main>
+<div id="toast" class="toast" hidden></div>
 <div id="moment" class="moment" hidden></div>
-<script src="game.js"></script>
+<script src="engine.js"></script>
+<script src="ui.js"></script>
 </body>
 </html>
