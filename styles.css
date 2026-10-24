@@ -82,3 +82,72 @@ button:focus-visible{outline:2px solid var(--ac);outline-offset:2px}
 @media(min-width:700px) and (max-width:1099px){.app{max-width:760px}}
 @media(max-width:480px){.places{grid-template-columns:1fr}}
 .scroll .dim{color:#5a4630;font-size:15px!important}
+.entry{display:grid;gap:3px;padding:10px 12px;background:#ffffff0c;border:1px solid #ffffff1c;border-left:4px solid var(--ac);border-radius:4px 10px 10px 4px}.entry small{color:var(--mist);font-size:13px;line-height:1.4}.entry.locked{opacity:.5}.entry .tag{font-size:11px;padding:1px 7px;margin-left:6px}
+
+/* ---- Worldbound v5: procedural artwork and cultivation expansion ---- */
+#art{position:absolute;inset:0;overflow:hidden}
+.world-scene{display:block;width:100%;height:100%;filter:saturate(1.16) contrast(1.05)}
+.hero-stamp{position:absolute;right:8px;bottom:-1px;width:112px;height:138px;z-index:1;opacity:.95;filter:drop-shadow(0 0 12px var(--ac));pointer-events:none}
+.hero-figure{width:100%;height:100%;display:block}
+.scene:after{z-index:1;pointer-events:none}
+.head{z-index:3}
+.qi-mote{animation:qi-drift 10s ease-in-out infinite alternate;filter:drop-shadow(0 0 4px currentColor)}
+@keyframes qi-drift{to{transform:translate(8px,-12px);opacity:.2}}
+.foe-portrait{width:100%;max-width:150px;max-height:150px;display:block;border-radius:16px;filter:drop-shadow(0 8px 18px #0007)}
+.duel-art{float:right;width:126px;margin:0 0 8px 14px}
+.danger-hint{display:block;color:#ffbd83;font-size:12px;line-height:1.45;margin-top:5px;max-width:42ch}
+.choice .danger-hint{flex-basis:100%;}
+.dao-act{border-color:#69d6d2;color:#aaf4e7;background:linear-gradient(110deg,#0b766e55,#182c4b55)}
+.tabs{overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:thin;padding-bottom:3px;white-space:nowrap}
+.tabs button{flex:0 0 auto;min-width:64px;font-size:12px}
+.panel{min-width:0}
+.system-card{display:grid;gap:7px;padding:12px;border:1px solid #ffffff1a;border-left:3px solid var(--ac);border-radius:10px;background:linear-gradient(135deg,#ffffff0c,#ffffff03);margin:5px 0}
+.system-card h2,.system-card h3{margin:0;color:#f5dfb0;font:600 16px var(--serif);letter-spacing:0;text-transform:none}
+.system-card p{margin:0;color:#d5dfd9;font-size:13px;line-height:1.5}
+.system-card small{display:block;color:var(--mist);font-size:12px;line-height:1.45}
+.card-row,.button-row,.mini-stats,.role-row{display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:space-between}
+.mini-stats{justify-content:flex-start;color:var(--mist);font-size:11px}
+.button-row button,.role-row button{border:1px solid #ffffff25;border-radius:7px;padding:5px 8px;background:#ffffff0d;color:#f2e6ce;font-size:11px}
+.role-row button.selected{border-color:var(--ac);color:var(--ac);background:#ffffff13}
+.button-row button:disabled,.role-row button:disabled{opacity:.5}
+.meter{height:5px;background:#ffffff18;border-radius:8px;overflow:hidden}
+.meter span{display:block;height:100%;background:linear-gradient(90deg,#56ddcc,#f1cf80);box-shadow:0 0 10px #56ddcc88;transition:width .3s}
+.warning-line{padding:8px 10px;border-left:3px solid #e3a35d;background:#ad6e2a1c;color:#f2d1a6;font-size:12px}
+.study-choice{border-left-color:#65d5cb;background:linear-gradient(90deg,#1b827a44,#ffffff05)}
+.bestiary-entry{grid-template-columns:76px minmax(0,1fr);align-items:center}
+.entry-portrait{width:72px}
+.entry-portrait .foe-portrait{max-width:72px;max-height:72px}
+.beast-card{grid-template-columns:82px minmax(0,1fr);align-items:start}
+.beast-portrait .foe-portrait{width:78px;height:78px}
+.beast-copy{display:grid;gap:5px;min-width:0}
+.beast-copy button{border:1px solid var(--ac);border-radius:7px;padding:7px;background:#ffffff0d;color:#f2e6ce;font-size:12px}
+.beast-copy button:disabled{opacity:.45}
+.faction-card{border-left-color:#d5af6d}
+.path-card{border-left-color:#61ddd2;background:radial-gradient(circle at top right,#237b7440,transparent 55%),#ffffff08}
+@media(max-width:480px){
+  .hero-stamp{width:84px;height:112px;right:0;bottom:0;opacity:.8}
+  .duel-art{width:86px;margin-left:8px}
+  .foe-portrait{max-width:108px;max-height:108px}
+  .tabs{margin-left:8px;margin-right:8px;gap:4px}
+  .tabs button{min-width:58px;padding:8px 7px;font-size:11px}
+  .panel{margin-left:8px;margin-right:8px;padding:10px}
+  .bestiary-entry{grid-template-columns:58px minmax(0,1fr)}
+  .entry-portrait,.entry-portrait .foe-portrait{width:56px;max-width:56px;height:56px}
+  .beast-card{grid-template-columns:62px minmax(0,1fr)}
+  .beast-portrait .foe-portrait{width:60px;height:60px}
+}
+
+/* Field research: useful archival progression that connects exploration to survival. */
+.research-meter{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;margin:10px 0 16px;border:1px solid #77d9bd55;border-radius:10px;background:linear-gradient(120deg,#14372f99,#162d3799);color:var(--mist)}
+.research-meter b{font-size:24px;color:#a7f3d0;font-variant-numeric:tabular-nums}
+.research-card h3{margin:0;font-size:16px}
+.research-card p{margin:8px 0 12px;line-height:1.5}
+.research-card .card-row{align-items:start}
+
+.save-tools{display:flex;gap:12px;flex-wrap:wrap;margin-top:6px;align-items:center}
+.save-tools button,.save-tools .import-label{font:inherit;font-size:12px;cursor:pointer}
+.save-tools .link:hover{color:#fff6dc}
+
+/* v6.1: ten tabs wrap on wide screens instead of clipping; interruption notice */
+@media(min-width:1100px){.tabs{flex-wrap:wrap;overflow-x:visible;white-space:normal}.tabs button{flex:1 1 auto;border-radius:8px}}
+.lockmsg{flex:1 1 100%;margin:0 0 6px;padding:8px 12px;border-left:3px solid var(--seal);background:#7d1f1a22;color:#ffd9d2!important}

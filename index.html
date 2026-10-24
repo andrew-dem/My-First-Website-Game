@@ -26,12 +26,15 @@
   <div class="col-r">
     <nav class="tabs" id="tabs" role="tablist"></nav>
     <section class="panel" id="panel"></section>
-    <footer>Fate carries over between lives. <button id="wipe" class="link">Erase all progress</button></footer>
+    <footer>Fate carries over between lives.
+      <div class="save-tools"><button id="export-save" class="link">Export save</button><label class="link import-label" for="import-save">Import save<input id="import-save" type="file" accept="application/json,.json" hidden></label><button id="wipe" class="link">Erase all progress</button></div>
+    </footer>
   </div>
 </main>
 <div id="toast" class="toast" hidden></div>
 <div id="moment" class="moment" hidden></div>
 <script src="engine.js"></script>
+<script src="art.js"></script>
 <script src="ui.js"></script>
 </body>
 </html>
